@@ -1,4 +1,4 @@
-var post_preview = {
+const post_preview = {
 
 	saved_posts: {},
 
@@ -17,7 +17,7 @@ var post_preview = {
 		*/
 
 		// fetch url: tid => `https://example.com/showthread.php?tid=${tid}`
-		fetch_url: tid => `https://community.mybb.com/thread-${tid}.html`,
+		fetch_url: tid => `https://example/thread-${tid}.html`,
 
 		preview_class: "post_preview", // Class name for the container of the post preview.
 
@@ -148,8 +148,10 @@ var post_preview = {
 }
 
 // add hover handler
-$("[data-preview-post]").hover((e) => {
+$(document).ready(() => {
+    $("[data-preview-post]").hover((e) => {
 	post_preview.preview(e);
-}, () => {
+    }, () => {
 	post_preview.remove_previews();
+    })
 })
