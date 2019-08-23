@@ -3,155 +3,140 @@ const post_preview = {
 	saved_posts: {},
 
 	options: {
-		/* 
-			Fetch URL is the target thread's URL. This works with both the standard MyBB URL's and
-			SEO URL's. Any URL that has a unique thread id should work.
-			Grab any threads URL then replace the thread id with ${tid} then paste in the fetch URL section.
+        preview_class: "post_preview",
+        
+        fetch_url: tid => `http://localhost:90/mybb1.8.21/showthread.php?tid=${tid}`, 
 
-			For example;
-			 - https://example.com/thread-1111.html
-			 becomes: https://example.com/thread-${tid}.html
-
-			 - https://example.com/showthread.php?tid=1111
-			 becomes: https://example.com/showthread.php?tid=${tid}
-		*/
-
-		// fetch url: tid => `https://example.com/showthread.php?tid=${tid}`
-		fetch_url: tid => `https://example/thread-${tid}.html`,
-
-		preview_class: "post_preview", // Class name for the container of the post preview.
+        comments: true,
 
 		fetch_selectors: {
-			body: ".post_body", // Class name of the post content
-			author: ".author_avatar", // Class name of the author's section.
+			body: ".post"
 		},
 
 		preview_css: {
-			height: 100,
+			height: 800,
 			width: 500, 
 			margin: 30, // distance in pixels the preview box should be from the post title
 		}
 
-	},
+    },
+    
+    get_content: async (part, el, url, comments) => {
 
+        if (comments) {
+            url = `${url} ${post_preview.options.fetch_selectors[part]}`;
+        } else {
+            url = `${url} ${post_preview.options.fetch_selectors[part]}:eq(0)`;
+        }
+        
 
-	get_post: async (el,url) => {
-		url = `${url} ${post_preview.options.fetch_selectors.body}:eq(0)`;
-
-		await new Promise((resolve,reject) => {
+        await new Promise((resolve,reject) => {
 			$(el).load(url, (response,status,xhr) => {
 
 				if (status == "error") reject(xhr);
 				resolve(response);
 
 			})
-		})
-		.catch(xhr => console.log(`Unable to fetch post content: ${xhr.status}, ${xhr.statusText}`));
+        })
+        .catch(xhr => console.log(`Unable to fetch post content: ${xhr.status}, ${xhr.statusText}`));
 
 		return el;
+    },
 
-	},
-
-	get_author: async (el,url) => {
-		url = `${url} ${post_preview.options.fetch_selectors.author}:eq(0)`;
-		
-		await new Promise((resolve,reject) => {
-			$(el).load(url, { limit: 1 }, (response,status,xhr) => {
-
-				if (status == "error") reject(xhr);
-				resolve(response);
-
-			});
-		})
-		.catch(xhr => console.log(`Unable to fetch content: ${xhr.status}, ${xhr.statusText}`));
-
-		return el;
-
-	},
-
-	get_preview: async post => {
+	get_preview: async (link,comments) => {
 		
 		// create container for our post and author sections of the preview
 		let post_container = document.createElement("div");
 		let author = document.createElement("div");
+		let username = document.createElement("div");
 
 		
 		author.setAttribute("class", "post_author");
-
-		// build fetch url
-		let url = post_preview.options.fetch_url(post); 
+		post_container.setAttribute("class", "post_container");
 
 		// fetch post and author content
-		post_container = await post_preview.get_post(post_container, url);
-		author = await post_preview.get_author(author, url);
+		post_container = await post_preview.get_content("body", post_container, link, comments);
+        // author = await post_preview.get_content("author_avatar", author, link);
+        // username = await post_preview.get_content("username", username, link)
 
-		return { a: author, p: post_container };
+		return { avatar: author, name: username, body: post_container };
 
 	},
 
-	preview: async e => {
-		if (!e) return;
-		
-		// remove any lingering previews
-		post_preview.remove_previews();
+	preview: async (e) => {
+        let selector,comments;
 
-		let selector = e.target.closest("[data-preview-post]");
-	
-		// build preview container
-		let preview_container = document.createElement("div");
-		preview_container.setAttribute("class", post_preview.options.preview_class);
+        if (!e.target || e.target.classList.contains("get-preview-replys")) {
+            e = post_preview.post_id;
+            comments = true;
+        } else {
+            selector = e.target;
+            // get post link
+            post_preview.post_id = selector.dataset.previewPost;
+        }
+        
+        let link = post_preview.options.fetch_url(post_preview.post_id);
 
-		// add a loader to the preview container for time being
-		let loader = document.createElement("span");
-		loader.id = "preview_loader";
-		loader.innerText = "Loading preview...";
-
-		preview_container.appendChild(loader);
-		
-		// output preview with loader & position correctly against link
-		selector.appendChild(preview_container);
-		$(preview_container).css({
-			height: post_preview.options.preview_css.height + "px",
-			width: post_preview.options.preview_css.width + "px",
-			bottom: 40 + "px"
-		});
-
-		// extract requested post id from link url
-		let post_id = selector.dataset.previewPost;
-
+		// preview container
+		let preview_container = document.querySelector(".preview-box");
+        if ($(preview_container).width() === 0) {
+            $(preview_container).animate({
+                width: $(".sidebar-menu").width(),
+                padding: "1rem"
+            },200);
+        }
+        
 		// if we have already loaded this preview use that data otherwise send ajax request for page
 		let post;
-		if (!post_preview.saved_posts[post_id]) {
+		if (!post_preview.saved_posts[link] || comments) {
 			// send request
-			post = await post_preview.get_preview(post_id);
+			post = await post_preview.get_preview(link,comments);
 			// save data so we don't need to request it again
-			post_preview.saved_posts[post_id] = post;
+			post_preview.saved_posts[link] = post;
 		} else {
 			// if data is already available, simply use that
-			post = post_preview.saved_posts[post_id];
-		}
-		
-		// remove loader and output our fetched data
-		loader.outerHTML = null;
-		post_preview.output_preview(preview_container,post)
+			post = post_preview.saved_posts[link];
+        }
+
+        let comment_button;
+        if (post_preview.options.comments && !comments) {
+            comment_button = document.createElement("button");
+            comment_button.onclick = post_preview.preview;
+            comment_button.classList = "get-preview-replys button";
+            comment_button.innerText = "View Replys"
+        }
+        
+        post_preview.output_preview(preview_container,post,comment_button);
 
 	},
 
-	output_preview: (container,output) => {
-		container.appendChild(output.a);
-		container.appendChild(output.p);
+	output_preview: (container,output,comment_button) => {
+        let el = document.createElement("div");
+        container.innerHTML = null;
+
+        arr = Object.values(output);
+        for (let item of arr) {
+            if (!item.classList.contains("post_container")) {
+                el.appendChild(item);
+            }
+        }
+        
+        container.appendChild(el);
+        container.appendChild(output.body);
+        if (comment_button) container.appendChild(comment_button);
+
+        $(".bc-page,.sidebar-menu").bind("click", post_preview.remove_previews);
 	},
 
-	remove_previews: () => {
-		$("." + post_preview.options.preview_class).remove();
+	remove_previews: e => {
+        $(".preview-box").animate({
+            width: 0,
+            padding: 0
+        },200);
+        $(".preview-box").html(null);
+        $(".bc-page,.sidebar-menu").unbind("click", post_preview.remove_previews);
 	}
 }
 
-// add hover handler
-$(document).ready(() => {
-    $("[data-preview-post]").hover((e) => {
-	post_preview.preview(e);
-    }, () => {
-	post_preview.remove_previews();
-    })
-})
+// add post previews
+$("body").on("click", "[data-preview-post]", e => post_preview.preview(event));
