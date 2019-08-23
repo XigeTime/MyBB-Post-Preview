@@ -3,9 +3,8 @@ const post_preview = {
 	saved_posts: {},
 
 	options: {
-        preview_class: "post_preview",
         
-        fetch_url: tid => `http://localhost:90/mybb1.8.21/showthread.php?tid=${tid}`, 
+        fetch_url: tid => `mybb/showthread.php?tid=${tid}`, 
 
         comments: true,
 
@@ -13,22 +12,11 @@ const post_preview = {
 			body: ".post"
 		},
 
-		preview_css: {
-			height: 800,
-			width: 500, 
-			margin: 30, // distance in pixels the preview box should be from the post title
-		}
-
     },
     
     get_content: async (part, el, url, comments) => {
 
-        if (comments) {
-            url = `${url} ${post_preview.options.fetch_selectors[part]}`;
-        } else {
-            url = `${url} ${post_preview.options.fetch_selectors[part]}:eq(0)`;
-        }
-        
+        url = `${url} ${post_preview.options.fetch_selectors[part]}${(!comments) ? ':eq(0)' : ''}`;        
 
         await new Promise((resolve,reject) => {
 			$(el).load(url, (response,status,xhr) => {
@@ -47,19 +35,13 @@ const post_preview = {
 		
 		// create container for our post and author sections of the preview
 		let post_container = document.createElement("div");
-		let author = document.createElement("div");
-		let username = document.createElement("div");
 
-		
-		author.setAttribute("class", "post_author");
 		post_container.setAttribute("class", "post_container");
 
 		// fetch post and author content
 		post_container = await post_preview.get_content("body", post_container, link, comments);
-        // author = await post_preview.get_content("author_avatar", author, link);
-        // username = await post_preview.get_content("username", username, link)
 
-		return { avatar: author, name: username, body: post_container };
+		return post_container;
 
 	},
 
@@ -114,12 +96,7 @@ const post_preview = {
         let el = document.createElement("div");
         container.innerHTML = null;
 
-        arr = Object.values(output);
-        for (let item of arr) {
-            if (!item.classList.contains("post_container")) {
-                el.appendChild(item);
-            }
-        }
+        el.appendChild(output);
         
         container.appendChild(el);
         container.appendChild(output.body);
